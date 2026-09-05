@@ -15,7 +15,8 @@ import java.util.function.Consumer;
 
 public final class TitleStudioFilePickerScreen extends TitleStudioRetroScreen {
 
-    private static final int PAGE_SIZE = 8;
+    private static final int MAX_PAGE_SIZE = 8;
+    private static final int ROW_HEIGHT = 20;
 
     private final Screen parent;
     private final Path directory;
@@ -53,12 +54,18 @@ public final class TitleStudioFilePickerScreen extends TitleStudioRetroScreen {
 
         int panelW = Math.min(560, width - 30);
         int left = (width - panelW) / 2;
+
         int top = 22;
         int quickY = top + 24;
         int pathY = top + 46;
         int listTop = top + 70;
+        int panelBottom = height - 18;
+        int navY = panelBottom - 36;
+        int listBottom = navY - 6;
+        int rowsPerPage = Math.max(1, Math.min(MAX_PAGE_SIZE, (listBottom - listTop) / ROW_HEIGHT));
 
         buildQuickLocationButtons(left, panelW, quickY);
+
         Path parentDir = directory != null ? directory.getParent() : null;
 
         TitleStudioButton parentButton = new TitleStudioButton(left + 10, pathY, 72, 18, Component.literal("← Parent"), button -> {
@@ -78,11 +85,12 @@ public final class TitleStudioFilePickerScreen extends TitleStudioRetroScreen {
             parentButton.active = true;
         }
 
-        int start = page * PAGE_SIZE;
-        int end = Math.min(entries.size(), start + PAGE_SIZE);
+        int maxPage = Math.max(0, (entries.size() - 1) / rowsPerPage);
+        int currentPage = Math.min(page, maxPage);
+        int start = currentPage * rowsPerPage;
+        int end = Math.min(entries.size(), start + rowsPerPage);
 
         for (int i = start; i < end; i++) {
-
             Path path = entries.get(i);
 
             boolean dir = Files.isDirectory(path);
@@ -93,45 +101,44 @@ public final class TitleStudioFilePickerScreen extends TitleStudioRetroScreen {
 
             int row = i - start;
 
-            addRenderableWidget(new TitleStudioButton(left + 10, listTop + row * 20, panelW - 20, 18, Component.literal(shorten(label, 72)), button -> {
+            addRenderableWidget(new TitleStudioButton(left + 10, listTop + row * ROW_HEIGHT, panelW - 20, 18, Component.literal(shorten(label, 72)), button -> {
                 if (dir) {
-
                     minecraft.setScreen(new TitleStudioFilePickerScreen(parent, path, extension, callback, 0, selectDirectory));
 
                     return;
                 }
 
                 if (!selectDirectory) {
-
                     callback.accept(path);
 
                     if (minecraft.screen == this) {
-
                         minecraft.setScreen(parent);
                     }
                 }
             }));
         }
 
-        int maxPage = Math.max(0, (entries.size() - 1) / PAGE_SIZE);
-        int navY = Math.min(height - 28, listTop + PAGE_SIZE * 20 + 5);
-
-        addRenderableWidget(new TitleStudioButton(left + 10, navY, 30, 18, Component.literal("<"), button -> {
-            if (page > 0) {
-
-                minecraft.setScreen(new TitleStudioFilePickerScreen(parent, directory, extension, callback, page - 1, selectDirectory));
+        TitleStudioButton previousButton = new TitleStudioButton(left + 10, navY, 30, 18, Component.literal("<"), button -> {
+            if (currentPage > 0) {
+                minecraft.setScreen(new TitleStudioFilePickerScreen(parent, directory, extension, callback, currentPage - 1, selectDirectory));
             }
-        }));
+        });
 
-        addRenderableWidget(new TitleStudioButton(left + 44, navY, 30, 18, Component.literal(">"), button -> {
-            if (page < maxPage) {
+        previousButton.active = currentPage > 0;
 
-                minecraft.setScreen(new TitleStudioFilePickerScreen(parent, directory, extension, callback, page + 1, selectDirectory));
+        addRenderableWidget(previousButton);
+
+        TitleStudioButton nextButton = new TitleStudioButton(left + 44, navY, 30, 18, Component.literal(">"), button -> {
+            if (currentPage < maxPage) {
+                minecraft.setScreen(new TitleStudioFilePickerScreen(parent, directory, extension, callback, currentPage + 1, selectDirectory));
             }
-        }));
+        });
+
+        nextButton.active = currentPage < maxPage;
+
+        addRenderableWidget(nextButton);
 
         if (selectDirectory) {
-
             int selectW = Math.min(132, Math.max(104, panelW / 3));
 
             int cancelW = 64;
@@ -140,14 +147,12 @@ public final class TitleStudioFilePickerScreen extends TitleStudioRetroScreen {
                 if (directory == null || !Files.isDirectory(directory)) {
 
                     error = "Choose a real folder first";
-
                     return;
                 }
 
                 callback.accept(directory);
 
                 if (minecraft.screen == this) {
-
                     minecraft.setScreen(parent);
                 }
             });
@@ -155,11 +160,9 @@ public final class TitleStudioFilePickerScreen extends TitleStudioRetroScreen {
             selectButton.active = directory != null && Files.isDirectory(directory);
 
             addRenderableWidget(selectButton);
-
             addRenderableWidget(new TitleStudioButton(left + panelW - cancelW - 10, navY, cancelW, 18, Component.literal("Cancel"), button -> minecraft.setScreen(parent)));
 
         } else {
-
             addRenderableWidget(new TitleStudioButton(left + panelW - 74, navY, 64, 18, Component.literal("Cancel"), button -> minecraft.setScreen(parent)));
         }
     }
@@ -247,11 +250,7 @@ public final class TitleStudioFilePickerScreen extends TitleStudioRetroScreen {
         TitleStudioRetroTheme.drawTitleBar(graphics, left + 3, top + 3, left + panelW - 3, 20);
 
 
-        graphics.drawString(font,
-                selectDirectory ? "FOLDER PICKER  •  EXPORT FOR MODS" : "FILE PICKER  •  " + extension.toUpperCase(Locale.ROOT),
-                left + 10, top + 8,
-                TitleStudioRetroTheme.LIME,
-                false);
+        graphics.drawString(font, selectDirectory ? "FOLDER PICKER  •  EXPORT FOR MODS" : "FILE PICKER  •  " + extension.toUpperCase(Locale.ROOT), left + 10, top + 8, TitleStudioRetroTheme.LIME, false);
 
 
         String shownPath = directory == null ? "Computer" : directory.toAbsolutePath().normalize().toString();
@@ -266,23 +265,12 @@ public final class TitleStudioFilePickerScreen extends TitleStudioRetroScreen {
                 false);
 
 
-        if (selectDirectory) {
-
-            graphics.drawString(font,
-                    directory == null ? "Choose a drive/folder first." : "Open a folder, then press Select this folder.",
-                    left + 10, bottom - 14,
-                    TitleStudioRetroTheme.TEXT_MUTED,
-                    false);
-        }
-
-
         if (error != null) {
+            graphics.drawString(font, error, left + 10, bottom - 14, TitleStudioRetroTheme.ERROR, false);
 
-            graphics.drawString(font,
-                    error,
-                    left + 10, bottom - 14,
-                    TitleStudioRetroTheme.ERROR,
-                    false);
+        } else if (selectDirectory) {
+
+            graphics.drawString(font, directory == null ? "Choose a drive/folder first." : "Open a folder, then press Select this folder.", left + 10, bottom - 14, TitleStudioRetroTheme.TEXT_MUTED, false);
         }
 
 
