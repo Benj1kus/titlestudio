@@ -57,12 +57,14 @@ public final class TitleStudioExporter {
         Path namespaceAssets = resourcepack.resolve("assets").resolve(project.namespace);
         Files.createDirectories(namespaceAssets);
 
-        copyImportedAssets(project, namespaceAssets);
-        writeSounds(project, namespaceAssets, false);
+        copyUsedAssets(project, namespaceAssets);
+        writeSounds(project, namespaceAssets);
         writeFonts(project, namespaceAssets);
 
         zipTree(datapack, root.resolve("datapack.zip"));
         zipTree(resourcepack, root.resolve("resourcepack.zip"));
+
+        writePackReadme(root);
 
         return new ExportResult(root, datapack, resourcepack);
     }
@@ -90,6 +92,7 @@ public final class TitleStudioExporter {
     }
 
     public static ModExportResult exportForMod(TitleStudioProject project, Path destinationParent) throws IOException {
+
         if (destinationParent == null) {
             throw new IOException("No export folder selected");
         }
@@ -100,18 +103,26 @@ public final class TitleStudioExporter {
         Files.createDirectories(destinationParent);
 
         String namespace = sanitizeNamespaceFolder(project.namespace);
-        Path root = destinationParent.resolve("TitleStudio_ModExport_" + namespace);
+        String titleSlug = sanitize(project.title_path.replace('/', '_'));
+
+        Path root = destinationParent.resolve("TitleStudio_ModExport_" + namespace + "_" + titleSlug);
+
+        deleteTree(root);
+
+        Files.createDirectories(root);
 
         Path definition = root.resolve("data").resolve(project.namespace).resolve("title_presentations").resolve(project.title_path + ".json");
-
         writeDefinition(project, definition);
-
         Path namespaceAssets = root.resolve("assets").resolve(project.namespace);
+
         Files.createDirectories(namespaceAssets);
 
-        copyImportedAssets(project, namespaceAssets);
-        writeSounds(project, namespaceAssets, true);
+        copyUsedAssets(project, namespaceAssets);
+        writeModSoundsFragment(project, root);
+
         writeFonts(project, namespaceAssets);
+
+        writeModReadme(root, project.namespace);
 
         return new ModExportResult(root, definition);
     }
@@ -121,81 +132,179 @@ public final class TitleStudioExporter {
         Files.writeString(definition, TitleRegistry.toJson(project.definition), StandardCharsets.UTF_8, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
     }
 
-    private static void copyImportedAssets(TitleStudioProject project, Path namespaceAssets) throws IOException {
-        Path imported = TitleStudioWorkspace.assetRoot(project);
-        if (Files.exists(imported)) {
-            copyTree(imported, namespaceAssets);
-        }
-    }
+    private static void copyUsedAssets(TitleStudioProject project, Path namespaceAssets) throws IOException {
 
-    private static void writeSounds(TitleStudioProject project, Path namespaceAssets, boolean mergeExisting) throws IOException {
-        if (project.sounds == null || project.sounds.isEmpty()) {
+        Path imported = TitleStudioWorkspace.assetRoot(project);
+        if (!Files.exists(imported)) {
             return;
         }
 
-        Path soundsJson = namespaceAssets.resolve("sounds.json");
-        JsonObject root = new JsonObject();
+        String soundKey = localResourceKey(project.definition.sound.event, project.namespace);
 
-        if (mergeExisting && Files.isRegularFile(soundsJson)) {
-            try {
-                JsonElement existing = GSON.fromJson(Files.readString(soundsJson, StandardCharsets.UTF_8), JsonElement.class);
-
-                if (existing != null && existing.isJsonObject()) {
-                    root = existing.getAsJsonObject();
-                }
-            } catch (Exception ignored) {
-                root = new JsonObject();
+        if (soundKey != null) {
+            String soundPath = project.sounds.get(soundKey);
+            if (soundPath != null && !soundPath.isBlank()) {
+                copyOne(imported.resolve("sounds").resolve(soundPath + ".ogg"), namespaceAssets.resolve("sounds").resolve(soundPath + ".ogg"));
             }
         }
 
-        for (Map.Entry<String, String> entry : project.sounds.entrySet()) {
-            JsonObject sound = new JsonObject();
-            JsonArray array = new JsonArray();
-            JsonObject item = new JsonObject();
+        String fontKey = localResourceKey(project.definition.font, project.namespace);
 
-            item.addProperty("name", project.namespace + ":" + entry.getValue());
-            item.addProperty("stream", false);
+        if (fontKey != null) {
 
-            array.add(item);
-            sound.add("sounds", array);
-            root.add(entry.getKey(), sound);
+            String fontPath = project.imported_fonts.get(fontKey);
+            if (fontPath != null && !fontPath.isBlank()) {
+                copyOne(imported.resolve(fontPath), namespaceAssets.resolve(fontPath));
+            }
+        }
+    }
+
+    private static String localResourceKey(String resourceId, String namespace) {
+        if (resourceId == null || resourceId.isBlank()) {
+
+            return null;
+        }
+
+        String prefix = namespace + ":";
+
+        if (!resourceId.startsWith(prefix)) {
+            return null;
+        }
+
+        String key = resourceId.substring(prefix.length());
+
+        return key.isBlank() ? null : key;
+    }
+
+    private static void copyOne(Path source, Path target) throws IOException {
+
+        if (!Files.isRegularFile(source)) {
+            return;
+        }
+
+        Files.createDirectories(target.getParent());
+        Files.copy(source, target, StandardCopyOption.REPLACE_EXISTING);
+    }
+
+    private static void writeSounds(TitleStudioProject project, Path namespaceAssets) throws IOException {
+        JsonObject root = createUsedSoundsJson(project);
+        if (root.size() == 0) {
+            return;
         }
 
         Files.createDirectories(namespaceAssets);
-        Files.writeString(soundsJson, GSON.toJson(root), StandardCharsets.UTF_8, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
+        Files.writeString(namespaceAssets.resolve("sounds.json"), GSON.toJson(root), StandardCharsets.UTF_8, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
+    }
+
+    private static JsonObject createUsedSoundsJson(TitleStudioProject project) {
+        JsonObject root = new JsonObject();
+
+        String soundKey = localResourceKey(project.definition.sound.event, project.namespace);
+
+        if (soundKey == null) {
+            return root;
+        }
+
+        String soundPath = project.sounds.get(soundKey);
+
+        if (soundPath == null || soundPath.isBlank()) {
+
+            return root;
+        }
+
+        JsonObject sound = new JsonObject();
+        JsonArray array = new JsonArray();
+        JsonObject item = new JsonObject();
+
+        item.addProperty("name", project.namespace + ":" + soundPath);
+        item.addProperty("stream", false);
+        array.add(item);
+        sound.add("sounds", array);
+        root.add(soundKey, sound);
+
+        return root;
+    }
+
+    private static void writeModSoundsFragment(TitleStudioProject project, Path root) throws IOException {
+        JsonObject sounds = createUsedSoundsJson(project);
+        if (sounds.size() == 0) {
+            return;
+        }
+
+        Files.writeString(root.resolve("SOUNDS_TO_MERGE.json"), GSON.toJson(sounds), StandardCharsets.UTF_8, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
     }
 
     private static void writeFonts(TitleStudioProject project, Path namespaceAssets) throws IOException {
-        if (project.imported_fonts == null || project.imported_fonts.isEmpty()) return;
+
+        String fontKey = localResourceKey(project.definition.font, project.namespace);
+
+        if (fontKey == null) {
+            return;
+        }
+
+        String importedPath = project.imported_fonts.get(fontKey);
+
+        if (importedPath == null || importedPath.isBlank()) {
+
+            return;
+        }
 
         Path fontDir = namespaceAssets.resolve("font");
         Files.createDirectories(fontDir);
+        JsonObject provider = new JsonObject();
 
-        for (String fontPath : project.imported_fonts.keySet()) {
-            JsonObject provider = new JsonObject();
-            provider.addProperty("type", "ttf");
-            provider.addProperty("file", project.namespace + ":" + fontPath + ".ttf");
-            provider.addProperty("size", 16.0F);
-            provider.addProperty("oversample", 4.0F);
+        provider.addProperty("type", "ttf");
+        provider.addProperty("file", project.namespace + ":" + fontKey + ".ttf");
+        provider.addProperty("size", 16.0F);
+        provider.addProperty("oversample", 4.0F);
 
-            JsonArray shift = new JsonArray();
-            shift.add(0.0F);
-            shift.add(0.0F);
-            provider.add("shift", shift);
+        JsonArray shift = new JsonArray();
 
-            JsonArray providers = new JsonArray();
-            providers.add(provider);
+        shift.add(0.0F);
+        shift.add(0.0F);
 
-            JsonObject fallback = new JsonObject();
-            fallback.addProperty("type", "reference");
-            fallback.addProperty("id", "minecraft:default");
-            providers.add(fallback);
+        provider.add("shift", shift);
+        JsonArray providers = new JsonArray();
+        providers.add(provider);
+        JsonObject fallback = new JsonObject();
 
-            JsonObject root = new JsonObject();
-            root.add("providers", providers);
+        fallback.addProperty("type", "reference");
+        fallback.addProperty("id", "minecraft:default");
 
-            Files.writeString(fontDir.resolve(fontPath + ".json"), GSON.toJson(root), StandardCharsets.UTF_8, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
-        }
+        providers.add(fallback);
+        JsonObject root = new JsonObject();
+        root.add("providers", providers);
+
+        Files.writeString(fontDir.resolve(fontKey + ".json"), GSON.toJson(root), StandardCharsets.UTF_8, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
+    }
+
+    private static void writePackReadme(Path root) throws IOException {
+
+        String text = """
+                Title Studio Export
+                
+                1. Put datapack.zip into your world's datapacks folder.
+                2. Put resourcepack.zip into .minecraft/resourcepacks and enable it.
+                3. Run /reload or re-enter the world. Use F3+T after resource changes if needed.
+                
+                Both packs are required when the title uses custom fonts or sounds.
+                """;
+
+        Files.writeString(root.resolve("README.txt"), text, StandardCharsets.UTF_8, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
+    }
+
+    private static void writeModReadme(Path root, String namespace) throws IOException {
+
+        String text = """
+                Title Studio - Mod Export
+                
+                1. Copy data/ and assets/ into your mod's src/main/resources/.
+                2. If SOUNDS_TO_MERGE.json exists, merge its top-level entries into assets/%s/sounds.json.
+                   If sounds.json does not exist yet, move the file there and rename it to sounds.json.
+                3. Rebuild/reload your mod.
+                """.formatted(namespace);
+
+        Files.writeString(root.resolve("README.txt"), text, StandardCharsets.UTF_8, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
     }
 
     private static void writePackMcmeta(Path root, String description) throws IOException {

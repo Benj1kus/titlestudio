@@ -1103,14 +1103,9 @@ public final class TitleStudioScreen extends TitleStudioRetroScreen {
     private void resetAllSettings() {
         String workspaceId = project.workspace_id;
 
-        java.util.Map<String, String> keptSounds = new java.util.LinkedHashMap<>(project.sounds);
-
-        java.util.Map<String, String> keptFonts = new java.util.LinkedHashMap<>(project.imported_fonts);
-
         TitleStudioProject defaults = TitleStudioProject.createDefault();
+
         defaults.workspace_id = workspaceId;
-        defaults.sounds = keptSounds;
-        defaults.imported_fonts = keptFonts;
         defaults.normalize();
 
         project = defaults;
