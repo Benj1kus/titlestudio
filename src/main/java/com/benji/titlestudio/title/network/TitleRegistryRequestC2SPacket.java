@@ -5,7 +5,6 @@ import net.minecraft.core.registries.Registries;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.server.packs.resources.ResourceManager;
 import net.minecraft.world.level.biome.Biome;
 import net.minecraft.world.level.levelgen.structure.Structure;
 import net.minecraftforge.network.NetworkEvent;
@@ -48,7 +47,7 @@ public record TitleRegistryRequestC2SPacket(String type) {
 
                     Registry<Structure> registry = player.serverLevel().registryAccess().registryOrThrow(Registries.STRUCTURE);
                     ids.addAll(registry.keySet());
-                    templates.addAll(collectStructureTemplates(player.getServer().getResourceManager()));
+                    templates.addAll(collectStructureTemplates(player));
 
                 } else {
 
@@ -68,27 +67,21 @@ public record TitleRegistryRequestC2SPacket(String type) {
         context.setPacketHandled(true);
     }
 
-    private static List<ResourceLocation> collectStructureTemplates(ResourceManager resourceManager) {
-        if (resourceManager == null) {
+    private static List<ResourceLocation> collectStructureTemplates(ServerPlayer player) {
+        if (player == null || player.getServer() == null) {
             return List.of();
         }
 
         Set<ResourceLocation> result = new LinkedHashSet<>();
-        resourceManager.listResources("structures", id -> id.getPath().endsWith(".nbt")).keySet().forEach(resourceId -> {
-            String path = resourceId.getPath();
 
-            if (!path.startsWith("structures/")) {
-                return;
-            }
-            path = path.substring("structures/".length());
-            if (path.endsWith(".nbt")) {
-                path = path.substring(0, path.length() - 4);
-            }
-            if (path.isBlank()) {
-                return;
-            }
-            result.add(ResourceLocation.fromNamespaceAndPath(resourceId.getNamespace(), path));
-        });
+        try {
+            player.getServer()
+                    .getStructureManager()
+                    .listTemplates()
+                    .forEach(result::add);
+        } catch (Exception ignored) {
+            return List.of();
+        }
 
         return new ArrayList<>(result);
     }

@@ -166,10 +166,6 @@ public final class TitleStudioRegistryBrowserScreen extends TitleStudioRetroScre
                 String prefix = entry.template() ? "[TEMPLATE] " : "";
 
                 TitleStudioButton button = new TitleStudioButton(left + 12, y, panelW - 31, ROW_H, Component.literal(prefix + entry.id()), pressed -> {
-                    if (entry.template()) {
-                        return;
-                    }
-
                     callback.accept(entry.id().toString());
 
                     if (minecraft.screen == this) {
@@ -177,10 +173,6 @@ public final class TitleStudioRegistryBrowserScreen extends TitleStudioRetroScre
                         minecraft.setScreen(parent);
                     }
                 });
-
-                if (entry.template()) {
-                    button.active = false;
-                }
 
                 addRenderableWidget(button);
             }
@@ -235,7 +227,7 @@ public final class TitleStudioRegistryBrowserScreen extends TitleStudioRetroScre
 
         if ("structure".equals(type)) {
 
-            String hint = "WORLDGEN = selectable" + "  •  TEMPLATE = raw .nbt asset";
+            String hint = "WORLDGEN + TEMPLATE = selectable structure triggers";
 
             graphics.drawString(font, font.plainSubstrByWidth(hint, Math.max(60, panelW - 112)), left + 12, bottom - 21, TitleStudioRetroTheme.TEXT_HINT, false);
         }

@@ -260,7 +260,7 @@ public final class TitleStudioScreen extends TitleStudioRetroScreen {
 
         labels.add(new LabelLine("Browse reads the current world's registries, including other mods.", 12, rowY(5), MUTED));
         labels.add(new LabelLine("Runtime trigger checks are server-side, so multiplayer is consistent.", 12, rowY(6), MUTED));
-        labels.add(new LabelLine("NBT templates are shown in Browse, but need a region/placement tracker trigger.", 12, rowY(7), MUTED));
+        labels.add(new LabelLine("Raw NBT templates are selectable too; placed copies are detected automatically.", 12, rowY(7), MUTED));
     }
 
     private void initAudio() {

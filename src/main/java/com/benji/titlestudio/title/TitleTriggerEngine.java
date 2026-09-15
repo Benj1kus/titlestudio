@@ -79,7 +79,9 @@ public final class TitleTriggerEngine {
 
     @SubscribeEvent
     public static void logout(PlayerEvent.PlayerLoggedOutEvent event) {
-        PLAYER_STATES.remove(event.getEntity().getUUID());
+        UUID playerId = event.getEntity().getUUID();
+        PLAYER_STATES.remove(playerId);
+        TitleTemplateTriggerMatcher.clearPlayer(playerId);
     }
 
     private static boolean matches(ServerPlayer player, TitleDefinition.Trigger trigger) {
@@ -90,7 +92,7 @@ public final class TitleTriggerEngine {
 
         return switch (trigger.type) {
             case "biome" -> matchesBiome(player, target);
-            case "structure" -> matchesStructure(player, target);
+            case "structure" -> matchesStructure(player, target) || TitleTemplateTriggerMatcher.matches(player, target);
             default -> false;
         };
     }
