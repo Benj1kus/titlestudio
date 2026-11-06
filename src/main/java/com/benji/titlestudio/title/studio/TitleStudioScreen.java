@@ -187,7 +187,7 @@ public final class TitleStudioScreen extends TitleStudioRetroScreen {
 
         field("Title path", project.title_path, 2, value -> project.title_path = TitleStudioProject.sanitizePath(value), 128);
 
-        field("Text", project.definition.text, 3, value -> {
+        field("Text/Lang key", project.definition.text, 3, value -> {
             project.definition.text = value;
             replayPreview();
         }, 1024);

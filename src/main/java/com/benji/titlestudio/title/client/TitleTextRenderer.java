@@ -10,6 +10,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.Style;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.Mth;
+import net.minecraft.locale.Language;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -33,7 +34,8 @@ public final class TitleTextRenderer {
             fontId = ResourceLocation.fromNamespaceAndPath("minecraft", "default");
         }
 
-        Layout layout = layout(font, definition.text, fontId);
+        String displayText = Language.getInstance().getOrDefault(definition.text);
+        Layout layout = layout(font, displayText, fontId);
         if (layout.glyphs.isEmpty()) return;
 
         Lifecycle lifecycle = lifecycle(definition, ageTicks);
